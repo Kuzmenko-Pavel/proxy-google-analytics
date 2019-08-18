@@ -5,7 +5,8 @@ import signal
 
 from trafaret_config import commandline
 
-from proxy_google_analytics.logger import logger, exception_message  # ,ft
+from proxy_google_analytics.logger import logger, exception_message
+from proxy_google_analytics.click_db import get_click_engine
 from proxy_google_analytics.utils import TRAFARET_CONF
 from proxy_google_analytics.watcher import Watcher
 
@@ -15,15 +16,9 @@ class Daemonize(object):
 
     def __init__(self, config):
         logger.info("Creating daemon.")
-        engine = get_engine(config)
-        parent_engine = get_parent_engine(config)
+        click_engine = get_click_engine(config)
         try:
-            check_table(engine)
-        except Exception as e:
-            logger.error(exception_message(exc=str(e)))
-            sys.exit(1)
-        try:
-            self.watcher = Watcher(config, DBSession, parent_engine)
+            self.watcher = Watcher(config, click_engine)
         except Exception as e:
             logger.error(exception_message(exc=str(e)))
             sys.exit(1)

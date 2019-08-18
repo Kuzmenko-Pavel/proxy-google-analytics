@@ -18,7 +18,7 @@ def read_version():
             raise RuntimeError(msg)
 
 
-install_requires = ['pika',
+install_requires = ['pika==0.13.1',
                     'pymongo',
                     'mongodbproxy',
                     'trafaret-config'

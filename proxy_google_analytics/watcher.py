@@ -1,3 +1,8 @@
+# -*- coding: UTF-8 -*-
+from __future__ import absolute_import, unicode_literals
+
+__author__ = 'kuzmenko-pavel'
+import json
 import socket
 from datetime import datetime
 from queue import Queue
@@ -6,32 +11,34 @@ import pika
 from proxy_google_analytics.logger import logger, exception_message
 from proxy_google_analytics.worker import Worker
 
-
 server_name = socket.gethostname()
 server_time = datetime.now()
 
 
 class Watcher(object):
-    __slots__ = ['_connection', '_channel', '_closing', '_consumer_tag', '_url', '_messages', '_worker']
-    EXCHANGE = 'getmyad'
-    EXCHANGE_TYPE = 'topic'
-    DURABLE = False
-    AUTO_DELETE = True
-    QUEUES = [x % (server_name, server_time.strftime("%d-%m-%Y_%H:%M:%S:%f")) for x in ['campaign:%s_%s',
-                                                                                        'informer:%s_%s',
-                                                                                        'account:%s_%s',
-                                                                                        'rating:%s_%s',
-                                                                                        'domain:%s_%s']]
-    ROUTING_KEYS = ['campaign.#', 'informer.#', 'account.#', 'rating.#', 'domain.#']
+    __slots__ = ['_connection', '_channel', '_closing', '_consumer_tag', '_url', 'queue_name', 'exchange', '_queue',
+                 'exchange_type', 'routing_key', 'durable', 'auto_delete', '_messages', '_worker', '_buffer',
+                 '_buffer_threshold_length', '_buffer_threshold_time', 'amqp']
 
-    def __init__(self, config, db_session, parent_db_session):
+    def __init__(self, config, db_click):
+        amqp = config.get('amqp', '')
         self._connection = None
         self._channel = None
         self._closing = False
         self._consumer_tag = None
-        self._url = config['amqp']
+        self._url = amqp.get('broker_url', '')
+        self._queue = None
+        self.queue_name = amqp.get('queue', 'test')
+        self.exchange = amqp.get('exchange', 'test')
+        self.exchange_type = amqp.get('exchange_type', 'topic')
+        self.routing_key = amqp.get('routing_key', '*')
+        self.durable = amqp.get('durable', True)
+        self.auto_delete = amqp.get('auto_delete', False)
+        self._buffer = set()
+        self._buffer_threshold_length = 100
+        self._buffer_threshold_time = 60
         self._messages = Queue()
-        self._worker = Worker(self._messages, db_session, parent_db_session, config)
+        self._worker = Worker(self._messages, db_click, config)
 
     def connect(self):
         logger.debug('Connecting to %s', self._url)
@@ -44,6 +51,7 @@ class Watcher(object):
         logger.debug('Connection opened')
         self.add_on_connection_close_callback()
         self.open_channel()
+        self.timer_buffer_processing()
 
     def add_on_connection_close_callback(self):
 
@@ -80,7 +88,7 @@ class Watcher(object):
         logger.debug('Channel opened')
         self._channel = channel
         self.add_on_channel_close_callback()
-        self.setup_exchange(self.EXCHANGE)
+        self.setup_exchange(self.exchange)
 
     def add_on_channel_close_callback(self):
 
@@ -97,39 +105,30 @@ class Watcher(object):
 
         logger.debug('Declaring exchange %s', exchange_name)
         self._channel.exchange_declare(callback=self.on_exchange_declareok, exchange=exchange_name,
-                                       exchange_type=self.EXCHANGE_TYPE, durable=True, auto_delete=False, passive=False)
+                                       exchange_type=self.exchange_type, durable=self.durable,
+                                       auto_delete=self.auto_delete, passive=False)
 
     def on_exchange_declareok(self, unused_frame):
 
         logger.debug('Exchange declared')
-        for queue in self.QUEUES:
-            self.setup_queue(queue)
+        self.setup_queue(self.queue_name)
         self.start_consuming()
 
     def dummy(self, *args, **kwargs):
         pass
 
     def setup_queue(self, queue):
-        routing = ''
         logger.debug('Declaring queue %s', queue)
-        self._channel.queue_declare(callback=self.dummy, queue=queue, durable=self.DURABLE,
-                                    auto_delete=self.AUTO_DELETE, nowait=False)
-        for routing_key in self.ROUTING_KEYS:
-            queue_name = queue.split(':')[0]
-            routing_key_name = routing_key.split('.')[0]
-            if queue_name == routing_key_name:
-                routing = routing_key
-        if len(routing) > 0:
-            logger.debug('Binding %s to %s with %s ', self.EXCHANGE, queue, routing)
-            self._channel.queue_bind(callback=self.dummy, queue=queue, exchange=self.EXCHANGE, routing_key=routing,
-                                     nowait=False)
+        self._queue = self._channel.queue_declare(callback=self.dummy, queue=queue, durable=self.durable,
+                                                  auto_delete=self.auto_delete)
+        logger.debug('Binding %s to %s with %s ', self.exchange, queue, self.routing_key)
+        self._channel.queue_bind(callback=self.dummy, queue=queue, exchange=self.exchange, routing_key=self.routing_key)
 
     def start_consuming(self):
 
         logger.debug('Issuing consumer related RPC commands')
         self.add_on_cancel_callback()
-        for queue in self.QUEUES:
-            self._consumer_tag = self._channel.basic_consume(self.on_message, queue)
+        self._consumer_tag = self._channel.basic_consume(self.on_message, self.queue_name)
 
     def add_on_cancel_callback(self):
 
@@ -144,24 +143,41 @@ class Watcher(object):
             self._channel.close()
 
     def on_message(self, unused_channel, basic_deliver, properties, body):
-        date = datetime.now().strftime("%d-%m-%Y %H:%M:%S:%f")
+        if self.message_processing(unused_channel, basic_deliver, properties, body):
+            self.acknowledge_message(basic_deliver.delivery_tag)
+        else:
+            self.nacknowledge_message(basic_deliver.delivery_tag)
+
+    def message_processing(self, unused_channel, basic_deliver, properties, body):
         try:
-            if basic_deliver.exchange == 'getmyad':
-                key = basic_deliver.routing_key
-                msg = body.decode(encoding='UTF-8')
-                self._messages.put([key, msg])
-                logger.debug('%s Saved message # %s from %s - %s: %s %s', date, basic_deliver.delivery_tag,
-                             basic_deliver.exchange, basic_deliver.routing_key, properties.app_id, body)
-            else:
-                logger.debug('Received message # %s from %s - %s: %s %s', basic_deliver.delivery_tag,
-                             basic_deliver.exchange, basic_deliver.routing_key, properties.app_id, body)
+            key = basic_deliver.routing_key
+            msg = json.loads(body.decode(encoding='UTF-8'))
+            self._buffer.add((key, msg))
+            if len(self._buffer) > self._buffer_threshold_length:
+                self.buffer_processing()
+            return True
         except Exception as e:
             logger.error(exception_message(exc=str(e)))
-        self.acknowledge_message(basic_deliver.delivery_tag)
+            return False
+
+    def timer_buffer_processing(self):
+        logger.debug('Start timer buffer processing')
+        self.buffer_processing()
+        self._connection.add_timeout(self._buffer_threshold_time, self.timer_buffer_processing)
+
+    def buffer_processing(self):
+        logger.debug('Start buffer processing')
+        while self._buffer:
+            self._messages.put(self._buffer.pop())
+        logger.debug('Stop buffer processing')
 
     def acknowledge_message(self, delivery_tag):
         logger.debug('Acknowledging message %s', delivery_tag)
         self._channel.basic_ack(delivery_tag)
+
+    def nacknowledge_message(self, delivery_tag):
+        logger.debug('Acknowledging message %s', delivery_tag)
+        self._channel.basic_nack(delivery_tag)
 
     def stop_consuming(self):
         if self._channel:
@@ -184,8 +200,10 @@ class Watcher(object):
 
     def stop(self):
         logger.info('Stopping Listening AMQP')
-        self._worker.need_exit = True
+        self.buffer_processing()
         self._closing = True
+        self._worker.need_exit = True
+        self._worker.join()
         self.stop_consuming()
         self._connection.ioloop.start()
         logger.info('Stopped Listening AMQP')
