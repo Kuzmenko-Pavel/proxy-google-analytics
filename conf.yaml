@@ -2,7 +2,7 @@ mongo:
   uri: mongodb://srv-5.yottos.com:27018,srv-5.yottos.com:27019,srv-5.yottos.com:27020/getmyad_db?replicaSet=vsrv&readPreference=secondaryPreferred
 
 amqp:
-  broker_url: amqp://worker:worker@amqp.yottos.com/worker?socket_timeout=1&heartbeat=60
+  broker_url: amqp://worker:worker@amqp.yottos.com/proxy_google_analytics?socket_timeout=1&heartbeat=60
   queue: proxy_google_analytics
   exchange: proxy_google_analytics
   exchange_type: topic
