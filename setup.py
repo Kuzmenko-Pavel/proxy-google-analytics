@@ -21,7 +21,10 @@ def read_version():
 install_requires = ['pika==0.13.1',
                     'pymongo',
                     'mongodbproxy',
-                    'trafaret-config'
+                    'trafaret-config',
+                    'requests>=2.0,<3.0a0',
+                    'prices>=1.0.0',
+                    'typing>=3.6.0'
                     ]
 
 setup(

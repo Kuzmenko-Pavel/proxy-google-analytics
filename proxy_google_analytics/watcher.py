@@ -2,7 +2,6 @@
 from __future__ import absolute_import, unicode_literals
 
 __author__ = 'kuzmenko-pavel'
-import json
 import socket
 from datetime import datetime
 from queue import Queue
@@ -35,8 +34,8 @@ class Watcher(object):
         self.durable = amqp.get('durable', True)
         self.auto_delete = amqp.get('auto_delete', False)
         self._buffer = set()
-        self._buffer_threshold_length = 100
-        self._buffer_threshold_time = 60
+        self._buffer_threshold_length = 50
+        self._buffer_threshold_time = 30
         self._messages = Queue()
         self._worker = Worker(self._messages, db_click, config)
 
@@ -151,10 +150,11 @@ class Watcher(object):
     def message_processing(self, unused_channel, basic_deliver, properties, body):
         try:
             key = basic_deliver.routing_key
-            msg = json.loads(body.decode(encoding='UTF-8'))
-            self._buffer.add((key, msg))
-            if len(self._buffer) > self._buffer_threshold_length:
-                self.buffer_processing()
+            if body:
+                msg = body.decode(encoding='UTF-8')
+                self._buffer.add((key, msg))
+                if len(self._buffer) > self._buffer_threshold_length:
+                    self.buffer_processing()
             return True
         except Exception as e:
             logger.error(exception_message(exc=str(e)))

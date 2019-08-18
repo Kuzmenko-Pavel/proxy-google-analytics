@@ -1,6 +1,8 @@
 import time
 from threading import Thread
+import json
 
+from proxy_google_analytics.google_measurement_protocol import pageview, report
 from proxy_google_analytics.logger import logger, exception_message
 
 
@@ -29,6 +31,26 @@ class Worker(Thread):
 
     def message_processing(self, key, data):
         try:
-            logger.debug('Received message # %s: %s', key, data)
+            if key == 'action.click':
+                self.pageview(json.loads(data))
+            else:
+                logger.info('Received message # %s: %s', key, data)
         except Exception as e:
             logger.error(exception_message(exc=str(e)))
+
+    def pageview(self, data):
+        analytics = self.config.get('analytics', {})
+        account_id = data.get('account_id', '')
+        referer = data.get('referer')
+        url = data.get('url')
+        ip = data.get('ip')
+        ua = data.get('user_agent')
+        cid = data.get('cid')
+        analytic = analytics.get(account_id, analytics.get('default'))
+        if analytic:
+            d = pageview(location=url, referrer=referer, ip=ip, ua=ua)
+            r = report(analytic, cid, d)
+            print(r)
+
+    def event(self, data):
+        pass

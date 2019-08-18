@@ -13,4 +13,5 @@ TRAFARET_CONF = t.Dict({
         t.Key('durable'): t.Bool(),
         t.Key('auto_delete'): t.Bool(),
     }),
+    t.Key('analytics'): t.Dict().allow_extra('*'),
 })
