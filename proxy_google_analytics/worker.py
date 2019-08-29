@@ -33,16 +33,17 @@ class Worker(Thread):
 
     def message_processing(self, key, data):
         try:
+            d = json.loads(data)
             if key == 'action.click':
-                self.pageview(json.loads(data))
+                self.gpageview(d)
             elif key == 'action.goal':
-                self.event(json.loads(data))
+                self.gevent(d)
             else:
                 logger.info('Received message # %s: %s', key, data)
         except Exception as e:
             logger.error(exception_message(exc=str(e)))
 
-    def pageview(self, data):
+    def gpageview(self, data):
         analytics = self.config.get('analytics', {})
         account_id = data.get('account_id', '')
         referer = data.get('referer')
@@ -55,7 +56,7 @@ class Worker(Thread):
             d = pageview(location=url, referrer=referer, ip=ip, ua=ua)
             report(analytic, cid, d)
 
-    def event(self, data):
+    def gevent(self, data):
         analytics = self.config.get('analytics', {})
         account_id = data.get('account_id', '')
         referer = data.get('referer')

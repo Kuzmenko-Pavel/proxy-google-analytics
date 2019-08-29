@@ -25,8 +25,6 @@ def transaction(
         transaction_id: str, items: Iterable[Dict], revenue: Money,
         tax: Money=None, shipping: Money=None, affiliation: str=None,
         **extra_data) -> Generator[Dict, None, None]:
-    if not items:
-        raise ValueError('You need to specify at least one item')
 
     payload = {
         't': 'transaction', 'ti': transaction_id, 'tr': str(revenue.amount),
