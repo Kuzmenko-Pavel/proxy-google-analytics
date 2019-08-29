@@ -51,7 +51,7 @@ class Worker(Thread):
         ip = data.get('ip')
         ua = data.get('user_agent')
         cid = data.get('cid')
-        analytic = analytics.get(account_id, analytics.get('default'))
+        analytic = analytics.get(account_id.lower(), analytics.get('default'))
         if analytic:
             headers = {'User-Agent': ua}
             d = pageview(location=url, referrer=referer, ip=ip, ua=ua)
