@@ -1,8 +1,10 @@
 import time
 from threading import Thread
+from uuid import uuid4
 import json
+from prices import Money
 
-from proxy_google_analytics.google_measurement_protocol import pageview, report
+from proxy_google_analytics.google_measurement_protocol import pageview, report, event, transaction
 from proxy_google_analytics.logger import logger, exception_message
 
 
@@ -33,6 +35,8 @@ class Worker(Thread):
         try:
             if key == 'action.click':
                 self.pageview(json.loads(data))
+            elif key == 'action.goal':
+                self.event(json.loads(data))
             else:
                 logger.info('Received message # %s: %s', key, data)
         except Exception as e:
@@ -49,8 +53,23 @@ class Worker(Thread):
         analytic = analytics.get(account_id, analytics.get('default'))
         if analytic:
             d = pageview(location=url, referrer=referer, ip=ip, ua=ua)
-            r = report(analytic, cid, d)
-            print(r)
+            report(analytic, cid, d)
 
     def event(self, data):
-        pass
+        analytics = self.config.get('analytics', {})
+        account_id = data.get('account_id', '')
+        referer = data.get('referer')
+        currency = data.get('currency')
+        url = data.get('url')
+        ip = data.get('ip')
+        ua = data.get('user_agent')
+        price = data.get('price')
+        cid = data.get('cid')
+        analytic = analytics.get(account_id, analytics.get('default'))
+        if analytic:
+            d = pageview(location=url, referrer=referer, ip=ip, ua=ua)
+            e = event(category='click', action='click', label='click', value=price)
+            t = transaction(transaction_id=str(uuid4()), items=[], revenue=Money(price, currency))
+            report(analytic, cid, d)
+            report(analytic, cid, e)
+            report(analytic, cid, t)
