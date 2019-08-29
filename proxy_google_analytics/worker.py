@@ -57,7 +57,6 @@ class Worker(Thread):
             report(analytic, cid, d)
 
     def gevent(self, data):
-        print(data)
         analytics = self.config.get('analytics', {})
         account_id = data.get('account_id', '')
         referer = data.get('referer')
@@ -67,11 +66,13 @@ class Worker(Thread):
         ua = data.get('user_agent')
         price = data.get('price')
         cid = data.get('cid')
-        analytic = analytics.get(account_id, analytics.get('default'))
+        analytic = analytics.get(account_id.lower(), analytics.get('default'))
         if analytic:
+            print(data)
+            headers = {'user-agent': ua}
             d = pageview(location=url, referrer=referer, ip=ip, ua=ua)
-            e = event(category='click', action='click', label='click', value=price)
+            e = event('click', 'click', label='click', value=price)
             t = transaction(transaction_id=str(uuid4()), items=[], revenue=Money(price, currency))
-            report(analytic, cid, d)
-            report(analytic, cid, e)
-            report(analytic, cid, t)
+            report(analytic, cid, d, extra_header=headers)
+            report(analytic, cid, e, extra_header=headers)
+            report(analytic, cid, t, extra_header=headers)
