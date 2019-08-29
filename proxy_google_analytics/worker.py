@@ -74,7 +74,7 @@ class Worker(Thread):
             e = event('click', 'click', label='click', value=price, uip=ip, dl=url, ua=ua)
             m = Money(price, currency)
             i = item('offer', m, 1)
-            t = transaction(transaction_id=str(uuid4()), items=[i], revenue=m, uip=ip, dl=url, ua=ua)
+            t = transaction(transaction_id=str(uuid4()), items=[i], revenue=m, uip=ip, dl=url, ua=ua, pa='purchase')
             report(analytic, cid, d, extra_header=headers)
             report(analytic, cid, e, extra_header=headers)
             report(analytic, cid, t, extra_header=headers)
