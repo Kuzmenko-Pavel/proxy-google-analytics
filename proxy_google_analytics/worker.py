@@ -4,7 +4,7 @@ from uuid import uuid4
 import json
 from prices import Money
 
-from proxy_google_analytics.google_measurement_protocol import pageview, report, event, transaction
+from proxy_google_analytics.google_measurement_protocol import pageview, report, event, transaction, item
 from proxy_google_analytics.logger import logger, exception_message
 
 
@@ -53,8 +53,9 @@ class Worker(Thread):
         cid = data.get('cid')
         analytic = analytics.get(account_id, analytics.get('default'))
         if analytic:
+            headers = {'User-Agent': ua}
             d = pageview(location=url, referrer=referer, ip=ip, ua=ua)
-            report(analytic, cid, d)
+            report(analytic, cid, d, extra_header=headers)
 
     def gevent(self, data):
         analytics = self.config.get('analytics', {})
@@ -68,11 +69,12 @@ class Worker(Thread):
         cid = data.get('cid')
         analytic = analytics.get(account_id.lower(), analytics.get('default'))
         if analytic:
-            print(data)
-            headers = {'user-agent': ua}
+            headers = {'User-Agent': ua}
             d = pageview(location=url, referrer=referer, ip=ip, ua=ua)
-            e = event('click', 'click', label='click', value=price)
-            t = transaction(transaction_id=str(uuid4()), items=[], revenue=Money(price, currency))
+            e = event('click', 'click', label='click', value=price, uip=ip, dl=url, ua=ua)
+            m = Money(price, currency)
+            i = item('offer', m, 1)
+            t = transaction(transaction_id=str(uuid4()), items=[i], revenue=m, uip=ip, dl=url, ua=ua)
             report(analytic, cid, d, extra_header=headers)
             report(analytic, cid, e, extra_header=headers)
             report(analytic, cid, t, extra_header=headers)
