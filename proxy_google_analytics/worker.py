@@ -57,6 +57,7 @@ class Worker(Thread):
             report(analytic, cid, d)
 
     def gevent(self, data):
+        print(data)
         analytics = self.config.get('analytics', {})
         account_id = data.get('account_id', '')
         referer = data.get('referer')

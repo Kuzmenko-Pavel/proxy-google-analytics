@@ -34,8 +34,8 @@ class Watcher(object):
         self.durable = amqp.get('durable', True)
         self.auto_delete = amqp.get('auto_delete', False)
         self._buffer = set()
-        self._buffer_threshold_length = 2
-        self._buffer_threshold_time = 2
+        self._buffer_threshold_length = 10
+        self._buffer_threshold_time = 10
         self._messages = Queue()
         self._worker = Worker(self._messages, db_click, config)
 
